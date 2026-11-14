@@ -22,6 +22,7 @@ RUN apt-get update \
         openssh-server \
         python3 \
         python3-pip \
+        libicu-dev \
         unzip \
         zip \
     && install -d -m 0755 /etc/apt/keyrings \
