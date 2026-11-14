@@ -2,90 +2,81 @@ name: Build and publish workspace image
 
 on:
   push:
-    branches: [main]
-  workflow_dispatch:
-    inputs:
-      RELEASE_TYPE:
-        description: Semantic-version increment to publish
-        required: false
-        default: Patch
-        type: choice
-        options: [Major, Minor, Patch]
-  workflow_call:
-    inputs:
-      RELEASE_TYPE:
-        required: false
-        default: Patch
-        type: string
+    tags:
+      - 'release/v*'
+      - 'alpha/v*'
+      - 'beta/v*'
+      - 'pre-release/v*'
 
 permissions:
   contents: read
 
 env:
   IMAGE_NAME: docker.io/azka2606/ricode-workspace
-  RELEASE_TYPE: ${{ inputs.RELEASE_TYPE || vars.RELEASE_TYPE || 'Patch' }}
 
 jobs:
   build-and-push:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - uses: actions/checkout@v4
 
       - name: Log in to Docker Hub
         env:
           DOCKER_PAT: ${{ secrets.DOCKER_PAT }}
-        run: echo "$DOCKER_PAT" | docker login docker.io --username azka2606 --password-stdin
+          DOCKER_USER: ${{ secrets.DOCKER_USER }}
+        run: echo "$DOCKER_PAT" | docker login docker.io --username "$DOCKER_USER" --password-stdin
 
-      - name: Resolve next semantic version
+      - name: Resolve image tags from Git tag
         id: version
-        env:
-          DOCKER_PAT: ${{ secrets.DOCKER_PAT }}
         shell: bash
         run: |
           set -euo pipefail
-          release_type="${RELEASE_TYPE,,}"
-          case "$release_type" in
-            major|minor|patch) ;;
-            *) echo "Invalid RELEASE_TYPE: $RELEASE_TYPE (expected Major, Minor, or Patch)" >&2; exit 1 ;;
+          git_tag="${GITHUB_REF_NAME}"
+
+          case "$git_tag" in
+            release/*)
+              if [[ "$git_tag" =~ ^release/v([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
+                version="${BASH_REMATCH[1]}"
+                latest_tag='latest'
+              fi
+              ;;
+            alpha/*)
+              if [[ "$git_tag" =~ ^alpha/v([0-9]+\.[0-9]+\.[0-9]+)-alpha([0-9]+)$ ]]; then
+                version="${BASH_REMATCH[1]}-alpha${BASH_REMATCH[2]}"
+                latest_tag='latest-alpha'
+              fi
+              ;;
+            beta/*)
+              if [[ "$git_tag" =~ ^beta/v([0-9]+\.[0-9]+\.[0-9]+)-beta([0-9]+)$ ]]; then
+                version="${BASH_REMATCH[1]}-beta${BASH_REMATCH[2]}"
+                latest_tag='latest-beta'
+              fi
+              ;;
+            pre-release/*)
+              if [[ "$git_tag" =~ ^pre-release/v([0-9]+\.[0-9]+\.[0-9]+)-pre-release([0-9]+)$ ]]; then
+                version="${BASH_REMATCH[1]}-pre-release${BASH_REMATCH[2]}"
+                latest_tag='latest-pre-release'
+              fi
+              ;;
           esac
 
-          token="$(curl --fail --silent --show-error --request POST \
-            --header 'Content-Type: application/json' \
-            --data "{\"username\":\"azka2606\",\"password\":\"${DOCKER_PAT}\"}" \
-            https://hub.docker.com/v2/users/login/ | jq -r '.token // empty')"
-
-          tags_file="$(mktemp)"
-          url='https://hub.docker.com/v2/repositories/azka2606/ricode-workspace/tags?page_size=100'
-          while [[ -n "$url" ]]; do
-            response="$(curl --silent --show-error --fail --header "Authorization: JWT $token" "$url" 2>/dev/null || true)"
-            [[ -n "$response" ]] || break
-            jq -r '.results[]?.name' <<<"$response" >> "$tags_file"
-            url="$(jq -r '.next // empty' <<<"$response")"
-          done
-
-          latest="$(grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' "$tags_file" | sort -V | tail -n 1 || true)"
-          rm -f "$tags_file"
-          if [[ -z "$latest" ]]; then
-            version='1.0.0'
-          else
-            IFS=. read -r major minor patch <<<"$latest"
-            case "$release_type" in
-              major) version="$((major + 1)).0.0" ;;
-              minor) version="$major.$((minor + 1)).0" ;;
-              patch) version="$major.$minor.$((patch + 1))" ;;
-            esac
+          if [[ -z "${version:-}" || -z "${latest_tag:-}" ]]; then
+            echo "Unsupported tag: $git_tag" >&2
+            exit 1
           fi
 
           echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "Publishing version: $version"
+          echo "latest_tag=$latest_tag" >> "$GITHUB_OUTPUT"
+          echo "Publishing ${IMAGE_NAME}:${version} and ${IMAGE_NAME}:${latest_tag}"
 
       - name: Build image
         run: docker build --pull --tag "${IMAGE_NAME}:${{ steps.version.outputs.version }}" .
 
-      - name: Push version and latest tags
+      - name: Push version and channel tags
         env:
           VERSION: ${{ steps.version.outputs.version }}
+          LATEST_TAG: ${{ steps.version.outputs.latest_tag }}
         run: |
-          docker tag "${IMAGE_NAME}:${VERSION}" "${IMAGE_NAME}:latest"
+          docker tag "${IMAGE_NAME}:${VERSION}" "${IMAGE_NAME}:${LATEST_TAG}"
           docker push "${IMAGE_NAME}:${VERSION}"
-          docker push "${IMAGE_NAME}:latest"
+          docker push "${IMAGE_NAME}:${LATEST_TAG}"

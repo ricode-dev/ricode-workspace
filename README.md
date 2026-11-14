@@ -34,6 +34,5 @@ when the workspace must not create or manage host containers.
 
 The GitHub workflow publishes `latest` and a semantic-version tag. It reads
 `DOCKER_PAT` from repository secrets. `RELEASE_TYPE` accepts `Major`, `Minor`,
-or `Patch` (default); it is selectable on manual runs and may also be set as a
-repository variable for push-triggered builds.
+or `Patch` (default) and is selected when manually running the workflow.
 RiCode Workspace
