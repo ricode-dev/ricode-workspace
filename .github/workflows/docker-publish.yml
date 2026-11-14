@@ -80,12 +80,3 @@ jobs:
           docker tag "${IMAGE_NAME}:${VERSION}" "${IMAGE_NAME}:${LATEST_TAG}"
           docker push "${IMAGE_NAME}:${VERSION}"
           docker push "${IMAGE_NAME}:${LATEST_TAG}"
-
-      - name: Publish README to Docker Hub
-        uses: peter-evans/dockerhub-description@v5
-        with:
-          username: ${{ secrets.DOCKER_USER }}
-          password: ${{ secrets.DOCKER_PAT }}
-          repository: azka2606/ricode-workspace
-          readme-filepath: ./README.md
-          enable-url-completion: true
