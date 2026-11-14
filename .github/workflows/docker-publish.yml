@@ -1,0 +1,91 @@
+name: Build and publish workspace image
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      RELEASE_TYPE:
+        description: Semantic-version increment to publish
+        required: false
+        default: Patch
+        type: choice
+        options: [Major, Minor, Patch]
+  workflow_call:
+    inputs:
+      RELEASE_TYPE:
+        required: false
+        default: Patch
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  IMAGE_NAME: docker.io/azka2606/ricode-workspace
+  RELEASE_TYPE: ${{ inputs.RELEASE_TYPE || vars.RELEASE_TYPE || 'Patch' }}
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to Docker Hub
+        env:
+          DOCKER_PAT: ${{ secrets.DOCKER_PAT }}
+        run: echo "$DOCKER_PAT" | docker login docker.io --username azka2606 --password-stdin
+
+      - name: Resolve next semantic version
+        id: version
+        env:
+          DOCKER_PAT: ${{ secrets.DOCKER_PAT }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          release_type="${RELEASE_TYPE,,}"
+          case "$release_type" in
+            major|minor|patch) ;;
+            *) echo "Invalid RELEASE_TYPE: $RELEASE_TYPE (expected Major, Minor, or Patch)" >&2; exit 1 ;;
+          esac
+
+          token="$(curl --fail --silent --show-error --request POST \
+            --header 'Content-Type: application/json' \
+            --data "{\"username\":\"azka2606\",\"password\":\"${DOCKER_PAT}\"}" \
+            https://hub.docker.com/v2/users/login/ | jq -r '.token // empty')"
+
+          tags_file="$(mktemp)"
+          url='https://hub.docker.com/v2/repositories/azka2606/ricode-workspace/tags?page_size=100'
+          while [[ -n "$url" ]]; do
+            response="$(curl --silent --show-error --fail --header "Authorization: JWT $token" "$url" 2>/dev/null || true)"
+            [[ -n "$response" ]] || break
+            jq -r '.results[]?.name' <<<"$response" >> "$tags_file"
+            url="$(jq -r '.next // empty' <<<"$response")"
+          done
+
+          latest="$(grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' "$tags_file" | sort -V | tail -n 1 || true)"
+          rm -f "$tags_file"
+          if [[ -z "$latest" ]]; then
+            version='1.0.0'
+          else
+            IFS=. read -r major minor patch <<<"$latest"
+            case "$release_type" in
+              major) version="$((major + 1)).0.0" ;;
+              minor) version="$major.$((minor + 1)).0" ;;
+              patch) version="$major.$minor.$((patch + 1))" ;;
+            esac
+          fi
+
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Publishing version: $version"
+
+      - name: Build image
+        run: docker build --pull --tag "${IMAGE_NAME}:${{ steps.version.outputs.version }}" .
+
+      - name: Push version and latest tags
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          docker tag "${IMAGE_NAME}:${VERSION}" "${IMAGE_NAME}:latest"
+          docker push "${IMAGE_NAME}:${VERSION}"
+          docker push "${IMAGE_NAME}:latest"
