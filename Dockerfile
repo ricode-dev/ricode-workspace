@@ -68,8 +68,8 @@ RUN printf '%s\n' \
     && chmod 0644 /etc/profile.d/workspace-tools.sh
 
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal \
-    && CODEGRAPH_INSTALL_DIR=/usr/local/lib/codegraph CODEGRAPH_BIN_DIR=/usr/local/bin \
-        curl -fsSL https://raw.githubusercontent.com/colbymchenry/codegraph/main/install.sh | sh \
+    && curl -fsSL https://raw.githubusercontent.com/colbymchenry/codegraph/main/install.sh \
+        | env CODEGRAPH_INSTALL_DIR=/usr/local/lib/codegraph CODEGRAPH_BIN_DIR=/usr/local/bin sh \
     && rustc --version \
     && codegraph --version
 
