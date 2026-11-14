@@ -64,6 +64,8 @@ RUN mkdir -p "$NVM_DIR" \
 # available to non-interactive commands as well.
 RUN printf '%s\n' \
         'export NVM_DIR=/usr/local/nvm' \
+        'export CARGO_HOME=/usr/local/cargo' \
+        'export RUSTUP_HOME=/usr/local/rustup' \
         '[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"' \
         'export PATH="$NVM_DIR/current/bin:/usr/local/cargo/bin:$PATH"' \
         > /etc/profile.d/workspace-tools.sh \
