@@ -4,12 +4,6 @@ Debian Trixie-based workspace container with .NET SDK 8 and 10 installed via
 Microsoft's `dotnet-install.sh`, NVM (Node 16, 22,
 and 24), Python, Rust, Git/GitHub CLI, Docker CLI, CodeGraph, and SSH tools.
 
-Build locally:
-
-```sh
-docker build -t azka2606/ricode-workspace:latest .
-```
-
 Run the SSH-enabled workspace (the `authorized_keys` mount is required):
 
 ```sh
