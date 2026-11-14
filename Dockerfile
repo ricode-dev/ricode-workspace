@@ -9,7 +9,7 @@ ENV NVM_DIR=/usr/local/nvm \
     RUSTUP_HOME=/usr/local/rustup \
     GH_TOKEN= \
     GITHUB_TOKEN= \
-    PATH=/usr/local/nvm/current/bin:/usr/local/cargo/bin:/usr/local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+    PATH=/usr/local/nvm/current/bin:/usr/local/cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
@@ -20,6 +20,7 @@ RUN apt-get update \
         git \
         openssh-client \
         openssh-server \
+        tini \
         python3 \
         python3-pip \
         libicu-dev \
@@ -92,5 +93,6 @@ WORKDIR /workspace
 EXPOSE 22
 VOLUME ["/workspace"]
 
-ENTRYPOINT ["/usr/local/bin/docker-entrypoint"]
+# Forward stop signals to the command's process group and reap orphaned children.
+ENTRYPOINT ["/usr/bin/tini", "-g", "--", "/usr/local/bin/docker-entrypoint"]
 CMD ["sleep", "infinity"]

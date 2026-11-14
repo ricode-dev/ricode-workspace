@@ -22,6 +22,10 @@ key to a container-owned, permission-safe location before starting SSH, so the
 same command also works with Docker Desktop file mounts. To open an interactive
 shell while retaining SSH access, append `bash` to the `docker run` command.
 
+The image includes Tini as PID 1 to forward stop signals to the command's
+process group and reap orphaned processes. This lets the default `sleep infinity`
+command respond to SIGTERM when stopping the container with Docker or Podman.
+
 The Docker CLI uses the host daemon through the `/var/run/docker.sock` bind
 mount. This grants root-equivalent control of that Docker host; omit that mount
 when the workspace must not create or manage host containers.
