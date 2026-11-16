@@ -21,6 +21,11 @@ Connect with `ssh -p 2222 root@localhost`. The entrypoint copies the mounted
 key to a container-owned, permission-safe location before starting SSH, so the
 same command also works with Docker Desktop file mounts. To open an interactive
 shell while retaining SSH access, append `bash` to the `docker run` command.
+On its first start, the container writes every exported environment variable
+to root's `.bashrc`, so values passed with `docker run -e` (including
+`GH_TOKEN` and `GITHUB_TOKEN`) remain available in SSH shells. The values are
+kept for that container's lifetime; recreate the container to capture changed
+environment values.
 
 The image includes Tini as PID 1 to forward stop signals to the command's
 process group and reap orphaned processes. This lets the default `sleep infinity`
