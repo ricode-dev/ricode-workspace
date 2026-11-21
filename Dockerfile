@@ -88,6 +88,10 @@ RUN mkdir -p /root/.ssh \
         'AuthorizedKeysFile /run/sshd/authorized_keys' \
         > /etc/ssh/sshd_config.d/workspace.conf
 
+COPY netcoredbg/ /usr/local/share/netcoredbg/
+RUN chmod 0755 /usr/local/share/netcoredbg/netcoredbg
+
+COPY zed/settings.json /root/.config/zed/settings.json
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint
 RUN chmod 0755 /usr/local/bin/docker-entrypoint
 
