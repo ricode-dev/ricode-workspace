@@ -90,6 +90,7 @@ RUN mkdir -p /root/.ssh \
 
 COPY netcoredbg/ /usr/local/share/netcoredbg/
 RUN chmod 0755 /usr/local/share/netcoredbg/netcoredbg
+RUN ln -s /usr/local/share/netcoredbg/netcoredbg /usr/local/bin/netcoredbg
 
 COPY zed/settings.json /root/.config/zed/settings.json
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint
