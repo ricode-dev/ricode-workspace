@@ -2,6 +2,13 @@ FROM debian:trixie-slim
 
 ARG DEBIAN_FRONTEND=noninteractive
 ARG NVM_VERSION=v0.40.3
+ARG NETCOREDBG_VERSION=3.2.0-1092
+# NetCoreDbg extension 1.0.0, using zed_extension_api 0.7.0.
+ARG ZED_NETCOREDBG_REV=d8a8aa6c90faf155f983a44cc739b1cad34f4492
+ARG ZED_NETCOREDBG_SOURCE_SHA256=24bcc7f6f64641259c2040f8c2ea5712cd480bbb180c66f62b5dcf404e4697cf
+ARG ZED_EXTENSION_RUST_VERSION=1.93.1
+
+COPY zed/install-netcoredbg-extension.sh /usr/local/bin/install-zed-netcoredbg-extension
 
 ENV NVM_DIR=/usr/local/nvm \
     DOTNET_ROOT=/usr/share/dotnet \
@@ -88,13 +95,53 @@ RUN mkdir -p /root/.ssh \
         'AuthorizedKeysFile /run/sshd/authorized_keys' \
         > /etc/ssh/sshd_config.d/workspace.conf
 
-COPY netcoredbg/ /usr/local/share/netcoredbg/
-RUN chmod 0755 /usr/local/share/netcoredbg/netcoredbg
-RUN ln -s /usr/local/share/netcoredbg/netcoredbg /usr/local/bin/netcoredbg
+# Build the official sources for the image's architecture instead of copying a
+# host binary. Reuse the installed SDK and install all companion libraries.
+# Also build the pinned Zed extension: the binary alone cannot register an adapter.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends clang cmake make gcc \
+    && git clone --depth 1 --branch "$NETCOREDBG_VERSION" \
+        https://github.com/Samsung/netcoredbg.git /tmp/netcoredbg \
+    && CC=clang CXX=clang++ cmake -S /tmp/netcoredbg -B /tmp/netcoredbg/build \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_PREFIX=/usr/local/share/netcoredbg \
+        -DDOTNET_DIR="$DOTNET_ROOT" \
+    && cmake --build /tmp/netcoredbg/build --parallel 2 \
+    && cmake --install /tmp/netcoredbg/build \
+    && ln -s /usr/local/share/netcoredbg/netcoredbg /usr/local/bin/netcoredbg \
+    && rm -rf /tmp/netcoredbg /root/.nuget/packages \
+    && curl -fsSL "https://codeload.github.com/qwadrox/zed-netcoredbg/tar.gz/${ZED_NETCOREDBG_REV}" \
+        -o /tmp/zed-netcoredbg.tar.gz \
+    && echo "$ZED_NETCOREDBG_SOURCE_SHA256  /tmp/zed-netcoredbg.tar.gz" | sha256sum -c - \
+    && mkdir -p /tmp/zed-netcoredbg /usr/local/share/zed-extension-seeds/netcoredbg \
+    && tar -xzf /tmp/zed-netcoredbg.tar.gz --strip-components=1 -C /tmp/zed-netcoredbg \
+    && rustup toolchain install "$ZED_EXTENSION_RUST_VERSION" --profile minimal --target wasm32-wasip2 \
+    && CARGO_HOME=/tmp/zed-extension-cargo cargo +"$ZED_EXTENSION_RUST_VERSION" build --locked --release \
+        --target wasm32-wasip2 --manifest-path /tmp/zed-netcoredbg/Cargo.toml \
+    && cp /tmp/zed-netcoredbg/extension.toml /tmp/zed-netcoredbg/LICENSE \
+        /usr/local/share/zed-extension-seeds/netcoredbg/ \
+    && cp -a /tmp/zed-netcoredbg/debug_adapter_schemas \
+        /usr/local/share/zed-extension-seeds/netcoredbg/ \
+    && cp /tmp/zed-netcoredbg/target/wasm32-wasip2/release/netcoredbg.wasm \
+        /usr/local/share/zed-extension-seeds/netcoredbg/extension.wasm \
+    && printf '\n[lib]\nkind = "Rust"\nversion = "0.7.0"\n' \
+        >> /usr/local/share/zed-extension-seeds/netcoredbg/extension.toml \
+    && printf 'source=https://github.com/qwadrox/zed-netcoredbg\nrevision=%s\nsource_sha256=%s\nrust=%s\nextension=1.0.0\napi=0.7.0\n' \
+        "$ZED_NETCOREDBG_REV" "$ZED_NETCOREDBG_SOURCE_SHA256" "$ZED_EXTENSION_RUST_VERSION" \
+        > /usr/local/share/zed-extension-seeds/netcoredbg/BUILD-INFO \
+    && chmod 0755 /usr/local/bin/install-zed-netcoredbg-extension \
+    && /usr/local/bin/install-zed-netcoredbg-extension --check-seed \
+    && (cd /usr/local/share/zed-extension-seeds/netcoredbg && \
+        sha256sum extension.toml extension.wasm debug_adapter_schemas/netcoredbg.json LICENSE BUILD-INFO > SHA256SUMS) \
+    && /usr/local/bin/install-zed-netcoredbg-extension \
+    && rm -rf /tmp/zed-netcoredbg /tmp/zed-netcoredbg.tar.gz /tmp/zed-extension-cargo \
+    && apt-get purge -y --auto-remove clang cmake make gcc \
+    && rm -rf /var/lib/apt/lists/* \
+    && netcoredbg --version
 
 COPY zed/settings.json /root/.config/zed/settings.json
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint
-RUN chmod 0755 /usr/local/bin/docker-entrypoint
+RUN chmod 0755 /usr/local/bin/docker-entrypoint /usr/local/bin/install-zed-netcoredbg-extension
 
 WORKDIR /workspace
 EXPOSE 22

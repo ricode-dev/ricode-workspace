@@ -1,6 +1,7 @@
 .git
 .github
 .codegraph
+netcoredbg/
 **/.DS_Store
 **/bin
 **/obj

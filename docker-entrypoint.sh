@@ -35,6 +35,8 @@ fi
 # Copy the bind-mounted key to a container-owned file. This preserves SSH's
 # strict permission checks even when Docker Desktop exposes host files as 0777.
 install -m 0600 "$AUTHORIZED_KEYS" /run/sshd/authorized_keys
+# Seed after mounts are available, before Zed can connect over SSH.
+/usr/local/bin/install-zed-netcoredbg-extension
 /usr/sbin/sshd
 
 exec "$@"
