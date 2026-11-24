@@ -31,6 +31,8 @@ RUN apt-get update \
         python3 \
         python3-pip \
         libicu-dev \
+        libreoffice \
+        ghostscript \
         unzip \
         zip \
     && install -d -m 0755 /etc/apt/keyrings \
